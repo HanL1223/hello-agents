@@ -144,7 +144,7 @@ class ReActAgent(Agent):
 
             #update history
             self.current_history.append(f"Action: {action}")
-            self.current_history.append(f"Observation": {observation})
+            self.current_history.append(f"Observation: {observation}")
 
         print("Max steps reach")
         final_answer = "Sorry, Mission can't be finish in require steps"
@@ -166,14 +166,14 @@ class ReActAgent(Agent):
 
 
     def _parse_action(self, action_text: str) -> Tuple[Optional[str], Optional[str]]:
-        """解析行动文本，提取工具名称和输入"""
+        """Interprete Action Text, extract tool name and tool input"""
         match = re.match(r"(\w+)\[(.*)\]", action_text)
         if match:
             return match.group(1), match.group(2)
         return None, None
     
     def _parse_action_input(self, action_text: str) -> str:
-        """解析行动输入"""
+        """Extract action input"""
         match = re.match(r"\w+\[(.*)\]", action_text)
         return match.group(1) if match else ""
 
