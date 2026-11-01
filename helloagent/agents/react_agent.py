@@ -74,3 +74,109 @@ class ReActAgent(Agent):
         self.max_steps = max_steps
         self.current_history: List[str] = []
 
+        #Setting Prompt template, user custom first then default
+        self.prompt_template = custom_prompt if custom_prompt else DEFAULT_REACT_PROMPT
+
+    def run(self,input_text:str, **kwarg) -> str:
+        """
+        Running React Agent
+
+        Args:
+            input_text: User question
+            **kwarg: Other parameter
+        
+        Returns:
+            Final Output
+        """
+        self.clear_history = []
+        current_steps  = 0
+
+        print(f"\n{self.name} Begin process: {input_text}")
+
+        while current_steps < self.max_steps:
+            current_steps += 1
+            print (f"Step No:{current_steps}")
+
+            #creating prompt
+            tools_desc = self.tool_registry.get_tools_description()
+            history_str = "\n".join(self.current_history)
+            prompt = self.prompt_template.format(
+                tools = tools_desc,
+                question = input_text,
+                history = history_str
+            )
+
+            #Calling LLM
+            messages = [{"role": "user", "content": prompt}]
+            response_text = self.llm.invoke(messages,**kwarg)
+
+            if not response_text:
+                print("Error: LLM did not return")
+                break
+
+            thought, action = self._parse_output(response_text)
+
+            if thought:
+                print(f"Thinking {thought}")
+
+            if not action:
+                print(f"Warning, No valid action detected, end loop")
+                break
+
+            if action.startswith("Finish"):
+                final_answer = self._parse_action_input(action)
+                print(f"Final Answer{final_answer}")
+
+                self.add_message(Message(input_text,"user"))
+                self.add_message(Message(final_answer,"assistant"))
+
+                return final_answer
+
+            tool_name, tool_input = self._parse_action(action)
+
+            if not tool_name or tool_input is None:
+                self.current_history.append("Observation: Not valid action type")
+                continue
+            print(f"Action: {tool_name}[{tool_input}]")
+
+            observation = self.tool_registry.execute_tool(tool_name,tool_input)
+            print(f"Observe:{observation}")
+
+            #update history
+            self.current_history.append(f"Action: {action}")
+            self.current_history.append(f"Observation": {observation})
+
+        print("Max steps reach")
+        final_answer = "Sorry, Mission can't be finish in require steps"
+
+        self.add_message(Message(input_text,"user"))
+        self.add_message(Message(final_answer,"assistant"))
+
+        return final_answer
+
+    def _parse_output(self,text: str) -> Tuple[Optional[str],Optional[str]]:
+        """Interprete LLM Output,extract thought and action"""
+        thought_match = re.search(r"Thought: (.*)", text)
+        action_match = re.search(r"Action: (.*)", text)
+
+        thought = thought_match.group(1).strip() if thought_match else None
+        action = action_match.group(1).strip() if action_match else None
+        
+        return thought, action
+
+
+    def _parse_action(self, action_text: str) -> Tuple[Optional[str], Optional[str]]:
+        """解析行动文本，提取工具名称和输入"""
+        match = re.match(r"(\w+)\[(.*)\]", action_text)
+        if match:
+            return match.group(1), match.group(2)
+        return None, None
+    
+    def _parse_action_input(self, action_text: str) -> str:
+        """解析行动输入"""
+        match = re.match(r"\w+\[(.*)\]", action_text)
+        return match.group(1) if match else ""
+
+
+
+
