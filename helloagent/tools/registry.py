@@ -1,4 +1,4 @@
-"""工具注册表 - HelloAgents原生工具系统"""
+"""工具注册表 - HelloAgents' native tool registor system"""
 
 from typing import Optional, Any, Callable
 from ..core.exceptions import HelloAgentsException

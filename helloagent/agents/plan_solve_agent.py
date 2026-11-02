@@ -1,10 +1,12 @@
 import ast
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, TYPE_CHECKING
 from core.agent import Agent
 from core.my_llm import HelloAgentsLLM
 from core.config import Config
 from core.message import Message
 
+if TYPE_CHECKING:
+    from tools.registry import ToolRegistry
 
 # Default planner prompt
 DEFAULT_PLANNER_PROMPT = """
@@ -78,4 +80,21 @@ class Planner:
             print(f"unknown error when interprete plan")
 
 class Executor:
-    
+    def __init__(
+            self,
+            llm_client: HelloAgentsLLM,
+            system_prompt: Optional[str] = None,
+            tool_registry: Optional["ToolRegistry"] = None,
+            enable_tool_calling: bool = True,
+            max_tool_iteration: int = 3,
+    ):
+        self.llm_client = llm_client
+        self.system_prompt = (
+            system_prompt or "You are a professional AI executor, your task is solving problem step by step strictly according to the given plan, focus on current steps only, and give final answer for the step"
+            ""
+        )
+        self.tool_registry = tool_registry
+        self.enable_tool_calling = enable_tool_calling
+        self.max_tool_iteration = max_tool_iteration
+
+        
