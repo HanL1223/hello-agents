@@ -1,9 +1,13 @@
 import ast
+from contextlib import aclosing
+import json
+import asyncio
 from typing import Optional, List, Dict, TYPE_CHECKING
 from core.agent import Agent
 from core.my_llm import HelloAgentsLLM
 from core.config import Config
 from core.message import Message
+from .simple_agent import SimpleAgent
 
 if TYPE_CHECKING:
     from tools.registry import ToolRegistry
@@ -55,7 +59,7 @@ class Planner:
 
         Args:
             Question: Question to resolve
-            **kwarg: LLM parameters
+            **kwargs: LLM parameters
 
         Retrun:
             List of steps
@@ -96,5 +100,65 @@ class Executor:
         self.tool_registry = tool_registry
         self.enable_tool_calling = enable_tool_calling
         self.max_tool_iteration = max_tool_iteration
+
+    def _format_plan(self,plan: List[str]) -> str:
+        """Initial plan list"""
+        return "\n".join([f"{i}. {step}" for i, step in enumerate(plan, 1)])
+
+    def _format_history(self,history: List[Dict[str,str]]) -> str:
+        """Initial history log"""
+        return "\n\n".join(
+            [
+                f"Step {i}: {h['step']}\n Result: {h['result']}"
+                for i, h in enumerate(history,1)
+            ]
+        )
+
+    def step_prompt(slef,question,plan,history,step):
+        return (
+            f"Original Task: {question}\n Full Plan: \n {self._format_plan(plan)}"
+            f"Completed Step: \n{self._format_history(history) or "none"}\n"
+            f"Current Step: {step}\n Please execture current step and provide result"
+        )
+
+    def execute(self,question,plan,**kwargs):
+        if not plan:
+            raise ValueError("Execution plan can't be null")
+        hisotry = []
+        for step in plan:
+            result = self._execute_step(
+                self.step_prompt(question,plan,hisotry,step),**kwargs
+            )
+            hisotry.append({"step":step, "result":result})
+        return hisotry[-1]["result"]
+
+    def _execute_step(self,context,**kwargs):
+        #Indipendent executor registor, with no tool registor
+        config = Config(
+            trace_enabled=False,
+            session_enabled=False,
+            skills_enabled=False,
+            subagent_enabled=False,
+            todowrite_enabled=False,
+            devlog_enabled=False,
+        )
+
+        agent = SimpleAgent(
+            "executor",
+            self.llm_client,
+            self.system_prompt,
+            config,
+            tool_registry = self.tool_registry,
+            enable_tool_calling = self.enable_tool_calling
+            max_tool_iterations = self.max_tool_iterations
+        )
+
+        answer = agent.run(context,**kwargs)
+        if agent.last_run_status != "completed":
+            raise RuntimeError(f"Step not finish {agent.last_run.status}")
+        
+        
+
+    
 
         
