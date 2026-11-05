@@ -84,81 +84,115 @@ class Planner:
             print(f"unknown error when interprete plan")
 
 class Executor:
+    """Executor for running according to plan"""
+
+    def __init__(self, llm_client:HelloAgentsLLM, prompt_template: Optional[str] = None):
+        self.llm_client = llm_client
+        self.prompt_template = prompt_template if prompt_template else DEFAULT_EXECUTOR_PROMPT
+
+    def execute(self, question:str, plan = list[str], **kwargs) -> str:
+        """
+        Execute as per given plan
+
+        Args:
+            questions: Original question
+            plan: Execute plan genereated from planner
+            **kwargs: LLM Parameters
+        Returns:
+            Final answer 
+        """
+        history = ""
+        final_answer = ""
+
+        print("\n--Executing Plan--")
+        for i,step in enumerate(plan,1):
+            print(f"Executing step {i}/{len(plan)}: {step}")
+            prompt = self.prompt_template.format(
+                question = question,
+                plan = plan,
+                history = history if history else "None",
+                current_step = step
+            )
+            messages = [{"role": "user", "content": prompt}]
+            response_text = self.llm_client.invoke(messages,**kwargs) or ""
+
+            history += f"Step {i}: {step}\n Result: {response_text}\n\n"
+            final_answer = response_text
+            print(f"Step {i} completed, result: {final_answer}")
+
+        return final_answer
+    
+class PlanAndSolveAgent(Agent):
+    """
+    Plan and Solve Agent breaks down question into actionable steps, in particular
+
+    - Break complex question into simple,actionable steps
+    - Execute as per plan
+    - Maintain execute history and context
+    - Provide final answer
+
+    Suitable for multi-step inference, math and complex analysis
+    """
     def __init__(
             self,
-            llm_client: HelloAgentsLLM,
+            name:str,
+            llm:HelloAgentsLLM,
             system_prompt: Optional[str] = None,
-            tool_registry: Optional["ToolRegistry"] = None,
-            enable_tool_calling: bool = True,
-            max_tool_iteration: int = 3,
+            config: Optional[Config] = None,
+            custom_prompts:Optional[Dict[str,str]] = None
     ):
-        self.llm_client = llm_client
-        self.system_prompt = (
-            system_prompt or "You are a professional AI executor, your task is solving problem step by step strictly according to the given plan, focus on current steps only, and give final answer for the step"
-            ""
-        )
-        self.tool_registry = tool_registry
-        self.enable_tool_calling = enable_tool_calling
-        self.max_tool_iteration = max_tool_iteration
+        """
+        Init agent
 
-    def _format_plan(self,plan: List[str]) -> str:
-        """Initial plan list"""
-        return "\n".join([f"{i}. {step}" for i, step in enumerate(plan, 1)])
+        Args:
+            name:agent name
+            llm: llm client
+            system_prompt: system prompt
+            config: configruation object
+            custome_prompts = customer prompt template {"planner": "", "executor": ""}
+        """
+        super().__init__(name,llm,system_prompt,config)
 
-    def _format_history(self,history: List[Dict[str,str]]) -> str:
-        """Initial history log"""
-        return "\n\n".join(
-            [
-                f"Step {i}: {h['step']}\n Result: {h['result']}"
-                for i, h in enumerate(history,1)
-            ]
-        )
+        if custom_prompts:
+            planner_prompt = custom_prompts.get("planner")
+            executor_prompt = custom_prompts.get("executor")
 
-    def step_prompt(slef,question,plan,history,step):
-        return (
-            f"Original Task: {question}\n Full Plan: \n {self._format_plan(plan)}"
-            f"Completed Step: \n{self._format_history(history) or "none"}\n"
-            f"Current Step: {step}\n Please execture current step and provide result"
-        )
+        else:
+            planner_prompt = None
+            executor_prompt = None
 
-    def execute(self,question,plan,**kwargs):
+        self.planner = Planner(self.llm, planner_prompt)
+        self.executor = Executor(self.llm, executor_prompt)
+
+    def run(self, input_text:str, **kwargs) -> str:
+        """
+        Run plan and solve agent
+
+        args:
+            input_text: problem needs fix
+            **kwargs: Other parameters 
+        Return:
+            Final answer
+        """
+
+        print(f"\n{self.name} Begin processing question {input_text}")
+
+        #1.generate plan
+        plan = self.planner.plan(input_text, **kwargs)
         if not plan:
-            raise ValueError("Execution plan can't be null")
-        hisotry = []
-        for step in plan:
-            result = self._execute_step(
-                self.step_prompt(question,plan,hisotry,step),**kwargs
-            )
-            hisotry.append({"step":step, "result":result})
-        return hisotry[-1]["result"]
+            final_answer = "No valid action plan, abord"
+            print(f"\n--Task End--\n{final_answer}")
 
-    def _execute_step(self,context,**kwargs):
-        #Indipendent executor registor, with no tool registor
-        config = Config(
-            trace_enabled=False,
-            session_enabled=False,
-            skills_enabled=False,
-            subagent_enabled=False,
-            todowrite_enabled=False,
-            devlog_enabled=False,
-        )
+            self.add_message(Message(input_text,"user"))
+            self.add_message(Message(final_answer,"assistant"))
+            return final_answer
 
-        agent = SimpleAgent(
-            "executor",
-            self.llm_client,
-            self.system_prompt,
-            config,
-            tool_registry = self.tool_registry,
-            enable_tool_calling = self.enable_tool_calling
-            max_tool_iterations = self.max_tool_iterations
-        )
+        #2. execute plan
+        final_answer = self.executor.execute(input_text,plan,**kwargs)
+        print(f"Task completed\n final answer: {final_answer}")
 
-        answer = agent.run(context,**kwargs)
-        if agent.last_run_status != "completed":
-            raise RuntimeError(f"Step not finish {agent.last_run.status}")
-        
-        
+        # Append to history
+        self.add_message(Message(input_text,"user"))
+        self.add_message(Message(final_answer,"assistant"))
 
-    
-
-        
+        return final_answer
