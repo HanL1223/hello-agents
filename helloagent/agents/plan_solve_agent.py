@@ -1,16 +1,12 @@
 import ast
-from contextlib import aclosing
-import json
-import asyncio
 from typing import Optional, List, Dict, TYPE_CHECKING
-from core.agent import Agent
-from core.my_llm import HelloAgentsLLM
-from core.config import Config
-from core.message import Message
-from .simple_agent import SimpleAgent
+from ..core.agent import Agent
+from ..core.hello_agents import HelloAgentsLLM
+from ..core.config import Config
+from ..core.message import Message
 
 if TYPE_CHECKING:
-    from tools.registry import ToolRegistry
+    from ..tools.registry import ToolRegistry
 
 # Default planner prompt
 DEFAULT_PLANNER_PROMPT = """
@@ -90,7 +86,7 @@ class Executor:
         self.llm_client = llm_client
         self.prompt_template = prompt_template if prompt_template else DEFAULT_EXECUTOR_PROMPT
 
-    def execute(self, question:str, plan = list[str], **kwargs) -> str:
+    def execute(self, question: str, plan: List[str], **kwargs) -> str:
         """
         Execute as per given plan
 

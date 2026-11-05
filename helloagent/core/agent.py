@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Any
 from .message import Message
-from hello_agents import HelloAgentsLLM
+from .hello_agents import HelloAgentsLLM
 from .config import Config
 
 
