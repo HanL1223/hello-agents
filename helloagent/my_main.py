@@ -1,15 +1,17 @@
 from dotenv import load_dotenv
-from core.my_llm import MyLLM
 
-load_dotenv()
+from helloagent.core.hello_agents import HelloAgentsLLM
 
-llm = MyLLM(provider="modelscope")
 
-messages = [{"role":"user", "content":"Hi! Tell me about yourself"}]
+def main() -> None:
+    load_dotenv()
+    llm = HelloAgentsLLM()
+    messages = [{"role": "user", "content": "Hi! Tell me about yourself"}]
 
-response_stream = llm.think(messages)
+    for chunk in llm.stream_invoke(messages):
+        print(chunk, end="", flush=True)
+    print()
 
-print(response_stream)
 
-for chunk in response_stream:
-    pass
+if __name__ == "__main__":
+    main()
