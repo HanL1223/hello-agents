@@ -167,4 +167,3 @@ test_*.py
 !test_tools.py
 !helloagent/core/test_hello_agents.py
 .workbuddy/
-memory/
