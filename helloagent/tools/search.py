@@ -1,6 +1,5 @@
 from serpapi import SerpApiClient
 import os
-import 
 
 def searhc(query: str) -> str:
     """
